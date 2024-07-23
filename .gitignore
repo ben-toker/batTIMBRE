@@ -1,0 +1,8 @@
+*.mat
+*.pkl
+__pycache__/
+bat/__pycache__/
+.vscode/
+.DS_Store
+bat/.DS_Store
+venv/
