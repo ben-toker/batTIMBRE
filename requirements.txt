@@ -1,3 +1,4 @@
+tensorflow>=2.0.0
 hdf5storage
 numpy==1.26.4
 tqdm

@@ -1,4 +1,21 @@
-# Dependencies and MATLAB
-Due to the differing dependency builds and MATLAB versions of the bat dataset and TIMBRE architecture, there were many issues with handling older
-MATLAB files (in the rat dataset wth scipy.io) and newer (using hdf5storage) at the same time. Since the two datasets don't have to directly talk to eachother
-and we simply need to import them into one location, this was resolved by using the latest version of numpy that essentially didn't break hdf5storage (in version 2.0.0, released on June 16th,2024, a critical component to the functionality of hdf5storage broke. Reverting to numpy version 1.26.4 solved the issue.)
+# Setting up the development (virtual) environment
+
+We need to create a virtual environment (venv) to handle the odd dependencies of this project. Since we're trying to get two different projects to talk to eachother nicely, this is easily solved with a venv:
+
+```bash
+python -m venv venv
+```
+
+To activate the environment:
+Windows:
+```bash
+venv\Scripts\activate
+```
+macOS/Linux:
+```bash
+source venv/bin/activate
+```
+Install depencies:
+```bash
+pip install -r requirements.txt
+```
