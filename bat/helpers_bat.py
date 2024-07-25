@@ -3,8 +3,8 @@ from scipy import interpolate
 from scipy import stats
 import numpy as np
 from random import sample
-from dataset import *
-from YARTSEV.helpers import balanced_indices
+from bat.dataset import *
+from rat.helpers import balanced_indices
 
 '''
 A set of helper functions for preprocessing the bat data.
@@ -238,7 +238,7 @@ def test_train_bat(flightID, n_folds=5, which_fold=0, num_samples_at_end=5):
     train_inds = np.isin(fold_assign, np.arange(n_folds)) & ~test_inds
     print(f"Initial train_inds (before balancing): {np.sum(train_inds)}")
     
-    train_inds_balanced = balanced_indices(flightID[:, 1], train_inds)
+    train_inds_balanced = helpers.balanced_indices(flightID[:, 1], train_inds)
     print(f"Balanced train_inds: {len(train_inds_balanced)}")
     
     # Debug: Print the shapes to verify alignment
