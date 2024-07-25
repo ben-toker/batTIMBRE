@@ -1,8 +1,14 @@
 *.mat
 *.pkl
 __pycache__/
-bat/__pycache__/
 .vscode/
 .DS_Store
+*.ipynb_checkpoints/
+bat/__pycache__/
+bat/.ipynb_checkpoints/
 bat/.DS_Store
+rat/__pycache__/
+rat/.ipynb_checkpoints/
+rat/.DS_Store
 venv/
+yartsev.egg-info/
