@@ -1,3 +1,7 @@
+# Bats!
+![Bat Flight Paths by Cluster](graphs/allflights.png)
+
+
 ## Setting up the development (virtual) environment
 
 We need to create a virtual environment (venv) to handle the odd dependencies of this project. Since we're trying to get two different projects to talk to eachother nicely, this is easily solved with a venv:
