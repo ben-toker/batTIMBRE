@@ -4,8 +4,9 @@ Welcome to the batTIMBRE project! This repository is dedicated to applying the [
 ### Bat flight paths!
 ![Bat Flight Paths by Cluster](graphs/allflights.png)
 
-
-## Setting up the development (virtual) environment
+## Getting started
+First, clone the repository. Next, you will need to create a virtual environment to handle all the dependencies. 
+### Creating development (virtual) environment
 
 We need to create a virtual environment (venv) to handle the odd dependencies of this project. Since we're trying to get two different projects to talk to eachother nicely, this is easily solved with a venv:
 
