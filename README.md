@@ -1,4 +1,7 @@
-# Bats!
+# batTIMBRE
+Welcome to the batTIMBRE project! This repository is dedicated to applying the [TIMBRE architecture (developed by Professor Gautam Agarwal)](https://github.com/beatLaboratory/TIMBRE) to neuropixel probe data on bats. The primary goal of this project is to verify whether Local Field Potential (LFP) recordings encode positional information in bats. By analyzing both positional and neural data, we aim to gain insights into the neural underpinnings of bat navigation and spatial awareness.
+
+### Bat flight paths!
 ![Bat Flight Paths by Cluster](graphs/allflights.png)
 
 

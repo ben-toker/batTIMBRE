@@ -13,6 +13,27 @@ A set of helper functions for preprocessing the bat data.
 '''
 
 def get_flight_boolean_array(session, global_flight_number):
+    """
+    Generate a boolean array for a specific flight across all clusters and return its cluster ID.
+
+    Input:
+    - session: A session object containing flight data and cluster information.
+    - global_flight_number: An integer representing the overall flight number to retrieve,
+      counting sequentially across all clusters (excluding cluster 1).
+
+    Output:
+    - boolean_array: A numpy array of booleans, where True indicates the timebins
+      corresponding to the specified flight.
+    - cluster_id: An integer representing the cluster ID of the specified flight.
+
+    Raises:
+    - ValueError: If the global_flight_number is invalid (i.e., higher than the total
+      number of flights across all clusters).
+
+    Note:
+    - Cluster 1 is excluded from the count.
+    - Flights are counted sequentially across clusters in ascending order of cluster IDs.
+    """
     flight_behavior = session.cortex_data
     boolean_array = np.zeros(flight_behavior.num_cortex_timebins, dtype=bool)
     
@@ -30,8 +51,6 @@ def get_flight_boolean_array(session, global_flight_number):
     
     raise ValueError(f"Invalid flight number. Must be between 1 and {flight_count}")
 
-# Usage example:
-# flight_bool_array, flight_cluster = get_flight_boolean_array(session, 35)
 
 def get_cluster_labels(session, cluster):
     flight_behavior = session.cortex_data
@@ -223,18 +242,19 @@ def interpolate_nans(array, max_nan_span=10000000):
     
     return interpolated_array
 
-def get_flightID(session, binned_pos, binned_indices):
+import numpy as np
+
+def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bins, pos_timestamps):
     """
-    Organizes information about bat behavior into a matrix (flightID).
-
+    Construct a flightID array for all flights in the session.
     Input:
-        session: session object containing flight data
-        binned_pos: binned positional data array (3 x N) for X, Y, Z positions
-        binned_indices: Array of indices mapping original to binned timestamps
-
+    - session: A session object containing flight data and cluster information.
+    - binned_pos: A list or array of pre-filtered binned position data [x, y, z].
+    - valid_indices: Array of valid indices to use for the binned position data.
+    - lfp_timestamps_decimated_bins: Timestamps for the LFP bins.
+    - pos_timestamps: Timestamps for the position data.
     Output:
         flightID = Data stored in the format listed below
-
     flightID format:
         Column 0: Flight Number
         Column 1: Feeder visited (0: perch, 1: feeder 1, 2: feeder 2)
@@ -242,50 +262,57 @@ def get_flightID(session, binned_pos, binned_indices):
         Column 3: Y position in M
         Column 4: Z position in M
     """
-    # Initialize variables
-    flight_info = []
-    flight_number = 1
+    all_flight_data = []
+    flight_count = 0
 
-    # Iterate through each flight
-    for flight_number in range(session.num_flights):
-        start_idx = session.flight_start_idx[flight_number]
-        end_idx = session.flight_end_idx[flight_number]
-        print(f"Processing flight {flight_number + 1} from {start_idx} to {end_idx}")
+    all_clusters = sorted([int(cluster_id) for cluster_id in session.flights_by_cluster.keys() if int(cluster_id) != 1])
 
-        # Convert original indices to binned indices
-        binned_start_idx = binned_indices[start_idx]
-        binned_end_idx = binned_indices[end_idx]
+    for cluster_id in all_clusters:
+        cluster_flights = session.get_flights_by_cluster([cluster_id])
+        for flight in cluster_flights:
+            flight_count += 1
+            flight_bool, _ = get_flight_boolean_array(session, flight_count)
+            
+            # Apply valid_indices to the flight boolean array
+            labels = flight_bool[valid_indices]
+            
+            # Label timebins for this flight
+            timebin_labels = label_timebins(lfp_timestamps_decimated_bins, labels, pos_timestamps, is_discrete=True)
+            
+            # Get binned position data for this flight
+            flight_pos_x = binned_pos[0][:len(timebin_labels)][timebin_labels > 0]
+            flight_pos_y = binned_pos[1][:len(timebin_labels)][timebin_labels > 0]
+            flight_pos_z = binned_pos[2][:len(timebin_labels)][timebin_labels > 0]
 
-        # Ensure indices are within bounds
-        if binned_end_idx >= binned_pos.shape[1]:
-            print(f"Skipping flight with end_idx {binned_end_idx} as it exceeds bounds.")
-            continue
+            if len(flight_pos_x) == 0:
+                continue  # Skip this flight if no valid positions are found
 
-        # Determine which feeder the bat visited based on the x and y coordinates of the last position
-        end_x = binned_pos[0, binned_end_idx]
-        end_y = binned_pos[1, binned_end_idx]
-        
-        if end_y > 0 and end_x < 0:
-            feeder_visited = 0  # Perch
-        elif end_y > 0 and end_x > 0:
-            feeder_visited = 1  # Feeder 1
-        elif end_y < 0 and end_x > 0:
-            feeder_visited = 2  # Feeder 2
-        else:
-            feeder_visited = -1  # In case it doesn't match any criteria (should not happen)
-        
-        # Store the flight information for each sample in the binned_pos array
-        for idx in range(binned_start_idx, binned_end_idx + 1):
-            if idx < binned_pos.shape[1]:
-                flight_info.append([flight_number + 1, feeder_visited, binned_pos[0, idx], binned_pos[1, idx], binned_pos[2, idx]])
+            # Determine feeder visited based on end position
+            end_pos = [flight_pos_x[-1], flight_pos_y[-1], flight_pos_z[-1]]
+            if end_pos[1] > 0 and end_pos[0] < 0:
+                feeder = 0  # perch
+            elif end_pos[1] > 0 and end_pos[0] > 0:
+                feeder = 1  # feeder 1
+            elif end_pos[1] < 0 and end_pos[0] > 0:
+                feeder = 2  # feeder 2
             else:
-                print(f"Index {idx} out of bounds for binned_pos with shape {binned_pos.shape}")
-    
-    # Convert to numpy array
-    flightID = np.array(flight_info)
-    
-    return flightID
+                feeder = -1  # unknown
 
+            # Create flight data for all timebins of this flight
+            flight_data = np.column_stack((
+                np.full(len(flight_pos_x), flight_count),
+                np.full(len(flight_pos_x), feeder),
+                flight_pos_x,
+                flight_pos_y,
+                flight_pos_z
+            ))
+
+            all_flight_data.append(flight_data)
+
+    # Concatenate all flight data
+    flightID = np.vstack(all_flight_data)
+
+    return flightID
 def test_train_bat(flightID, n_folds=5, which_fold=0, num_samples_at_end=5):
     """
     Returns test and train samples for bat flight data.
