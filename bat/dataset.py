@@ -5,9 +5,8 @@ import matplotlib.pyplot as plt
 import scipy
 import os
 from scipy.ndimage import gaussian_filter
-#import sklearn
 import pickle
-import glob
+
 
 import pandas as pd
 

@@ -12,7 +12,57 @@ A set of helper functions for preprocessing the bat data.
 @author: Ben Toker
 '''
 
+def get_flight_boolean_array(session, global_flight_number):
+    flight_behavior = session.cortex_data
+    boolean_array = np.zeros(flight_behavior.num_cortex_timebins, dtype=bool)
+    
+    all_clusters = sorted([int(cluster_id) for cluster_id in session.flights_by_cluster.keys() if int(cluster_id) != 1])
+    
+    flight_count = 0
+    for cluster_id in all_clusters:
+        cluster_flights = session.get_flights_by_cluster([cluster_id])
+        for flight in cluster_flights:
+            flight_count += 1
+            if flight_count == global_flight_number:
+                start_idx, end_idx = flight.timebin_start_idx, flight.timebin_end_idx
+                boolean_array[start_idx:end_idx] = True
+                return boolean_array, cluster_id
+    
+    raise ValueError(f"Invalid flight number. Must be between 1 and {flight_count}")
+
+# Usage example:
+# flight_bool_array, flight_cluster = get_flight_boolean_array(session, 35)
+
+def get_cluster_labels(session, cluster):
+    flight_behavior = session.cortex_data
+    labels = np.full([flight_behavior.num_cortex_timebins], 0)
+    
+    # Get flights for the specified cluster
+    cluster_flights = session.get_flights_by_cluster((cluster,))
+    
+    # Label each flight in the cluster
+    for i_flight, flight in enumerate(cluster_flights, start=1):
+        s = flight.timebin_start_idx
+        e = flight.timebin_end_idx
+        labels[s:e] = i_flight
+    
+    return labels
+
 def find_multi_label_bins(spk_timebins, labels, label_timestamps_sec):
+    """
+    Finds the bins with multiple different labels and returns the unique combinations and counts.
+
+    Parameters:
+        spk_timebins (array-like): The time bins.
+        labels (array-like): The labels corresponding to label_timestamps_sec.
+        label_timestamps_sec (array-like): The timestamps of the labels.
+
+    Returns:
+        tuple: A tuple containing:
+            - bins_with_multi_unique_labels (array-like): The indices of bins with multiple different labels.
+            - unique_combinations (ndarray): The unique combinations of bin-label pairs.
+            - counts (ndarray): The counts of each unique combination.
+    """
     bin_indices = np.digitize(label_timestamps_sec, spk_timebins) - 1
     valid_mask = (bin_indices >= 0) & (bin_indices < len(spk_timebins) - 1)
     bin_indices = bin_indices[valid_mask]
@@ -27,15 +77,23 @@ def find_multi_label_bins(spk_timebins, labels, label_timestamps_sec):
    
     # Find bins with multiple different labels
     bins_with_multi_unique_labels = np.where(bin_label_counts > 1)[0]
-    #print(unique_combinations, counts)
 
     return bins_with_multi_unique_labels, unique_combinations, counts
 
 def label_timebins(spk_timebins, labels, label_timestamps_sec, is_discrete):
     """
-    result = label_timebins([0,2,4,6,8], np.array([2,2,4,5,6,6,6,6,1,2,2,4,3,3,3]), np.array([0.5,1,1.5,1.6,1.5,1,1,1,3.5,6.5,6.6,6.5,6.4,6.5,6.6]), is_discrete=True)
-    print(result)
+    Resamples labels to match the time bins defined by spk_timebins.
+    
+    Parameters:
+        spk_timebins (array-like): The time bins.
+        labels (array-like): The labels corresponding to label_timestamps_sec.
+        label_timestamps_sec (array-like): The timestamps of the labels.
+        is_discrete (bool): Indicates whether the labels are discrete or continuous.
+        
+    Returns:
+        array-like: The resampled labels.
     """
+    
     # Ensure inputs are numpy arrays
     spk_timebins = np.array(spk_timebins)
     labels = np.array(labels)
@@ -52,13 +110,11 @@ def label_timebins(spk_timebins, labels, label_timestamps_sec, is_discrete):
        
         # Find bins with multiple different labels
         multi_label_bins, unique_combinations, counts = find_multi_label_bins(spk_timebins, labels, label_timestamps_sec)
-        #print(multi_label_bins)
        
         # Correct labels for bins with multiple different labels
         if len(multi_label_bins) > 0:
             for bin_index in multi_label_bins:
                 bin_label_counts = np.argmax(counts[unique_combinations[:, 0] == bin_index])
-                #print(unique_combinations[unique_combinations[:, 0] == bin_index,:])
                 resampled_labels[bin_index] = unique_combinations[unique_combinations[:, 0] == bin_index, 1][bin_label_counts]
        
         # Set labels to 0 for bins without any labels
@@ -81,12 +137,23 @@ def label_timebins(spk_timebins, labels, label_timestamps_sec, is_discrete):
    
     return resampled_labels
 
-
 def label_in_timebin(timebin_edges, label_timestamps):
+    """
+    Determines which time bins each label falls into.
+
+    Parameters:
+    - timebin_edges (array-like): An array of time bin edges.
+    - label_timestamps (array-like): An array of label timestamps.
+
+    Returns:
+    - result (ndarray): An array of booleans indicating which time bins each label falls into.
+    """
+
+    # Convert input arrays to numpy arrays
     timebin_edges = np.array(timebin_edges)
     label_timestamps = np.array(label_timestamps)
    
-    # Create an array of booleans, one for each timebin
+    # Create an array of booleans, one for each time bin
     result = np.zeros(len(timebin_edges) - 1, dtype=bool)
    
     # Use numpy's digitize to find which bin each label falls into
@@ -102,7 +169,20 @@ def label_in_timebin(timebin_edges, label_timestamps):
     return result
 
 
+import numpy as np
+
 def interpolate_nans(array, max_nan_span=10000000):
+    """
+    Interpolates NaN values in a given array.
+
+    Args:
+        array (ndarray): The input array.
+        max_nan_span (int, optional): The maximum span of consecutive NaN values to interpolate. Defaults to 10000000.
+
+    Returns:
+        ndarray: The array with NaN values interpolated.
+
+    """
     n = len(array)
     is_nan = np.isnan(array)
     indices = np.arange(n)
