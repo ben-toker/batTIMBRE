@@ -4,6 +4,12 @@ Welcome to the batTIMBRE project! This repository is dedicated to applying the [
 ### Bat flight paths!
 ![Bat Flight Paths by Cluster](graphs/allflights.png)
 
+## Files of note
+- `bat_TIMBRE.ipynb` is where all the most important operations are done. From preprocessing to the final execution of TIMBRE on the bat data, it's all here and (to some extent) explained step by step.
+- `bat/example.ipynb` is an example notebook of how we can access the bat data and different graphs displaying the nature of the flight paths. It explains that the flight paths are separated by cluster, how the flight paths look in 3D space, and shows cluster position over time. 
+- `bat/helpers_bat.py` contains all the helper methods developed for analyses on the bat data.
+- `rat/LFP_demo.ipynb` is directly taken from the `TIMBRE` repository (listed above) - this shows how TIMBRE was applied to the rat data. Compare this to the final cell in `bat_TIMBRE.ipynb` and we can see how these analyses differ.
+
 ## Getting started
 First, clone the repository. Next, you will need to create a virtual environment to handle all the dependencies. 
 ### Creating development (virtual) environment
