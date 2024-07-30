@@ -338,6 +338,26 @@ def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bi
 
     return flightID
 
+def safe_accumarray(subs, vals, size=None, func=np.mean):
+    if size is None:
+        size = np.max(subs) + 1
+    
+    if vals.ndim == 1:
+        result = np.full(size, np.nan)
+    else:
+        result = np.full((size, vals.shape[1]), np.nan)
+    
+    for i, sub in enumerate(subs):
+        if 0 <= sub < size:
+            if np.isnan(result[sub]).all():
+                result[sub] = vals[i]
+            else:
+                if vals.ndim == 1:
+                    result[sub] = func([result[sub], vals[i]])
+                else:
+                    result[sub] = func([result[sub], vals[i]], axis=0)
+    return result
+
 def test_train_bat(flightID, n_folds=5, which_fold=0, num_samples_at_end=5):
     """
     Returns test and train samples for bat flight data.
