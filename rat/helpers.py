@@ -135,6 +135,17 @@ def layer_output(X, m, layer_num):
     m1 = models.Model(inputs=m.inputs, outputs=m.layers[layer_num].output)
     return m1.predict(X)  # return output of layer layer_num
 
+def safe_accumarray(subs, vals, size=None, func=np.mean):
+    if size is None:
+        size = np.max(subs) + 1
+    result = np.full((size, vals.shape[1]), np.nan)
+    for i, sub in enumerate(subs):
+        if 0 <= sub < size:
+            if np.isnan(result[sub, 0]):
+                result[sub] = vals[i]
+            else:
+                result[sub] = func([result[sub], vals[i]], axis=0)
+    return result
 
 def accumarray(subs, vals, size=None, fill_value=0):
     """

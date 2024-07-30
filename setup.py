@@ -12,11 +12,10 @@ setup(
         'tqdm',
         'matplotlib',
         'scipy',
-        'scikit-learn',
         'requests',
         'h5py',
-        'complexnn',
-        'keras-complex'
+        'keras-complex @ git+ssh://git@github.com/JesperDramsch/keras-complex.git',
+        'numba'
     ],
     include_package_data=True,
 )

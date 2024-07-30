@@ -152,36 +152,37 @@ def get_LFP(lfp_file, n_channels, init_fs, fs=25):
 
     return X
 
+import numpy as np
+from scipy.signal import decimate
+import math
+
 def get_LFP_from_mat(lfp_data, n_channels, init_fs, fs=25):
     """
     Decimates LFPs to desired sampling rate from a MATLAB file
-    
+
     Input:
     lfp_data = LFP data array from MATLAB file
     n_channels = number of channels in the data
     init_fs = inital sampling rate of the data
     fs = desired sampling rate (to decimate to)
-
     Output:
     X = formatted LFP data
     """
     dec = int(init_fs / fs)
     n_samples = lfp_data.shape[1]
-
-    # Clip the rows to remove electrodes implanted in mPFC.
-    if n_channels > 256:  # sessions 1 and 2
-        n_keep = 255
-    else:  # sessions 3 and 4
-        n_keep = 192
-
-    # Process each channel individually and store in the pre-allocated array
+    
+    # Determine number of channels to keep
+    n_keep = 255 if n_channels > 256 else 192
+    
+    # Calculate final length of the decimated data
     final_length = math.ceil(n_samples / dec)
+    
+    # Pre-allocate the array for the decimated data
     X = np.zeros((final_length, n_keep), dtype=np.float32)
+    
+    # Decimate each channel individually and store in the pre-allocated array
     for channel in range(n_keep):
-        # Load the channel data directly from the lfp_data array
         channel_data = lfp_data[channel, :]
-        # Decimate the channel data
         X[:, channel] = decimate(channel_data, dec, axis=0)
-        print(channel)
-
+    
     return X

@@ -3,8 +3,9 @@ from scipy import interpolate
 from scipy import stats
 import numpy as np
 from random import sample
+from numba import jit
 from bat.dataset import *
-from rat.helpers import balanced_indices
+from rat.helpers import *
 
 '''
 A set of helper functions for preprocessing the bat data.
@@ -242,7 +243,40 @@ def interpolate_nans(array, max_nan_span=10000000):
     
     return interpolated_array
 
-import numpy as np
+
+def get_flightID_modified(session, binned_pos, valid_indices, lfp_timestamps_decimated_bins, pos_timestamps):
+    flightID = np.zeros((len(binned_pos[0]), 5), dtype=float)  # Initialize with non-flight state
+    flightID[:, 1] = -1  # Set feeder visited to -1 for non-flight periods
+    flightID[:, 2:5] = binned_pos.T  # Set position data for all time points
+    
+    flight_count = 0
+    for cluster_id in session.flights_by_cluster.keys():
+        if cluster_id == 1:  # Skip unstructured flights if desired
+            continue
+        for flight in session.get_flights_by_cluster([cluster_id]):
+            flight_count += 1
+            flight_bool, _ = get_flight_boolean_array(session, flight_count)
+            labels = flight_bool[valid_indices]
+            timebin_labels = label_timebins(lfp_timestamps_decimated_bins, labels, pos_timestamps, is_discrete=True)
+            
+            flight_indices = np.where(timebin_labels > 0)[0]
+            if len(flight_indices) > 0:
+                flightID[flight_indices, 0] = flight_count
+                flightID[flight_indices, 1] = determine_feeder(binned_pos[:, flight_indices[-1]])
+    
+    return flightID
+
+
+@jit(nopython=True)
+def determine_feeder(end_pos):
+    if end_pos[1] > 0 and end_pos[0] < 0:
+        return 0  # perch
+    elif end_pos[1] > 0 and end_pos[0] > 0:
+        return 1  # feeder 1
+    elif end_pos[1] < 0 and end_pos[0] > 0:
+        return 2  # feeder 2
+    else:
+        return -1  # unknown
 
 def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bins, pos_timestamps):
     """
@@ -284,20 +318,10 @@ def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bi
             flight_pos_y = binned_pos[1][:len(timebin_labels)][timebin_labels > 0]
             flight_pos_z = binned_pos[2][:len(timebin_labels)][timebin_labels > 0]
 
-            if len(flight_pos_x) == 0:
-                continue  # Skip this flight if no valid positions are found
-
             # Determine feeder visited based on end position
             end_pos = [flight_pos_x[-1], flight_pos_y[-1], flight_pos_z[-1]]
-            if end_pos[1] > 0 and end_pos[0] < 0:
-                feeder = 0  # perch
-            elif end_pos[1] > 0 and end_pos[0] > 0:
-                feeder = 1  # feeder 1
-            elif end_pos[1] < 0 and end_pos[0] > 0:
-                feeder = 2  # feeder 2
-            else:
-                feeder = -1  # unknown
-
+            feeder = determine_feeder(end_pos)
+            
             # Create flight data for all timebins of this flight
             flight_data = np.column_stack((
                 np.full(len(flight_pos_x), flight_count),
@@ -313,6 +337,7 @@ def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bi
     flightID = np.vstack(all_flight_data)
 
     return flightID
+
 def test_train_bat(flightID, n_folds=5, which_fold=0, num_samples_at_end=5):
     """
     Returns test and train samples for bat flight data.
@@ -345,7 +370,7 @@ def test_train_bat(flightID, n_folds=5, which_fold=0, num_samples_at_end=5):
     train_inds = np.isin(fold_assign, np.arange(n_folds)) & ~test_inds
     print(f"Initial train_inds (before balancing): {np.sum(train_inds)}")
     
-    train_inds_balanced = helpers.balanced_indices(flightID[:, 1], train_inds)
+    train_inds_balanced = balanced_indices(flightID[:, 1], train_inds)
     print(f"Balanced train_inds: {len(train_inds_balanced)}")
     
     # Debug: Print the shapes to verify alignment
