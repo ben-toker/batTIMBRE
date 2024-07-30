@@ -10,7 +10,13 @@ Welcome to the batTIMBRE project! This repository is dedicated to applying the [
 - `bat/helpers_bat.py` contains all the helper methods developed for analyses on the bat data.
 - `rat/LFP_demo.ipynb` is directly taken from the `TIMBRE` repository (listed above) - this shows how TIMBRE was applied to the rat data. Compare this to the final cell in `bat_TIMBRE.ipynb` and we can see how these analyses differ.
 
-## Getting started
+# Goals with this project
+- Our end goal is training TIMBRE on the bats' LFP (local field potential) and flight path data to see if LFP encodes position, as there is a precedent with carrier-free decoding in rats (see [References](#references)).
+- Currently, we are focusing on whether LFP can encode the destination of the bats' flight paths. In other words: *once trained, will TIMBRE accurately predict if a bat will arrive at either of the two feeders or the perch?*
+- If we get good results with this analysis, we will move on to broader, more intensive investigation.
+
+
+# Getting started
 First, clone the repository. Next, you will need to create a virtual environment to handle all the dependencies. 
 ### Creating development (virtual) environment
 
@@ -36,3 +42,6 @@ pip install -e .
 ```
 
 Doing it this way ensures that we can easily establish imports between folders and files using the toplevel structure.
+
+## References
+- Agarwal, B Lustig, S Akera, E Pastalkova, AK Lee, FT Sommer. [News without the buzz: reading out weak theta rhythms in the hippocampus.](https://www.biorxiv.org/content/10.1101/2023.12.22.573160v1) bioRxiv, 2023.12. 22.573160
