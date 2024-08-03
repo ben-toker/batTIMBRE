@@ -101,7 +101,7 @@ def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bi
     Construct a flightID array for all flights in the session.
     Input:
     - session: A session object containing flight data and cluster information.
-    - binned_pos: A list or array of pre-filtered binned position data [x, y, z].
+    - binned_pos: A numpy array of pre-filtered binned position data with shape (n, 3) [x, y, z].
     - valid_indices: Array of valid indices to use for the binned position data.
     - lfp_timestamps_decimated_bins: Timestamps for the LFP bins.
     - pos_timestamps: Timestamps for the position data.
@@ -132,21 +132,20 @@ def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bi
             timebin_labels = label_timebins(lfp_timestamps_decimated_bins, labels, pos_timestamps, is_discrete=True)
             
             # Get binned position data for this flight
-            flight_pos_x = binned_pos[0][:len(timebin_labels)][timebin_labels > 0]
-            flight_pos_y = binned_pos[1][:len(timebin_labels)][timebin_labels > 0]
-            flight_pos_z = binned_pos[2][:len(timebin_labels)][timebin_labels > 0]
+            flight_pos = binned_pos[timebin_labels > 0]
+
+            if len(flight_pos) == 0:
+                continue  # Skip this flight if no valid positions are found
 
             # Determine feeder visited based on end position
-            end_pos = [flight_pos_x[-1], flight_pos_y[-1], flight_pos_z[-1]]
+            end_pos = flight_pos[-1]
             feeder = determine_feeder(end_pos)
-            
+
             # Create flight data for all timebins of this flight
             flight_data = np.column_stack((
-                np.full(len(flight_pos_x), flight_count),
-                np.full(len(flight_pos_x), feeder),
-                flight_pos_x,
-                flight_pos_y,
-                flight_pos_z
+                np.full(len(flight_pos), flight_count),
+                np.full(len(flight_pos), feeder),
+                flight_pos
             ))
 
             all_flight_data.append(flight_data)
@@ -155,3 +154,58 @@ def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bi
     flightID = np.vstack(all_flight_data)
 
     return flightID
+
+import numpy as np
+from bat.get_data import get_flight_boolean_array
+from bat.helpers_bat import label_timebins
+
+def get_flightLFP(session, LFPs, valid_indices, lfp_timestamps_decimated_bins, pos_timestamps):
+    """
+    Construct a flightLFP array for all flights in the session.
+    Input:
+    - session: A session object containing flight data and cluster information.
+    - LFPs: A numpy array of LFP data with shape (n_timepoints, n_channels)
+    - valid_indices: Array of valid indices to use for the LFP data.
+    - lfp_timestamps_decimated_bins: Timestamps for the LFP bins.
+    - pos_timestamps: Timestamps for the position data.
+    Output:
+        flightLFP = Data stored in the format listed below
+    flightLFP format:
+        Column 0: Flight Number
+        Columns 1+: LFP data for each channel
+    """
+    all_flight_data = []
+    flight_count = 0
+
+    all_clusters = sorted([int(cluster_id) for cluster_id in session.flights_by_cluster.keys() if int(cluster_id) != 1])
+
+    for cluster_id in all_clusters:
+        cluster_flights = session.get_flights_by_cluster([cluster_id])
+        for flight in cluster_flights:
+            flight_count += 1
+            flight_bool, _ = get_flight_boolean_array(session, flight_count)
+            
+            # Apply valid_indices to the flight boolean array
+            labels = flight_bool[valid_indices]
+            
+            # Label timebins for this flight
+            timebin_labels = label_timebins(lfp_timestamps_decimated_bins, labels, pos_timestamps, is_discrete=True)
+            
+            # Get LFP data for this flight
+            flight_lfp = LFPs[timebin_labels > 0]
+
+            if len(flight_lfp) == 0:
+                continue  # Skip this flight if no valid LFP data are found
+
+            # Create flight data for all timebins of this flight
+            flight_data = np.column_stack((
+                np.full(len(flight_lfp), flight_count),
+                flight_lfp
+            ))
+
+            all_flight_data.append(flight_data)
+
+    # Concatenate all flight data
+    flightLFP = np.vstack(all_flight_data)
+
+    return flightLFP
