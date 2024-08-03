@@ -96,6 +96,8 @@ def determine_feeder(end_pos):
     else:
         return -1  # unknown
 
+import numpy as np
+
 def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bins, pos_timestamps):
     """
     Construct a flightID array for all flights in the session.
@@ -116,48 +118,38 @@ def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bi
     """
     all_flight_data = []
     flight_count = 0
-
     all_clusters = sorted([int(cluster_id) for cluster_id in session.flights_by_cluster.keys() if int(cluster_id) != 1])
-
     for cluster_id in all_clusters:
         cluster_flights = session.get_flights_by_cluster([cluster_id])
         for flight in cluster_flights:
             flight_count += 1
-            flight_bool, _ = get_flight_boolean_array(session, flight_count)
-            
+            flight_bool, += get_flight_boolean_array(session, flight_count)
+
             # Apply valid_indices to the flight boolean array
             labels = flight_bool[valid_indices]
-            
+
             # Label timebins for this flight
             timebin_labels = label_timebins(lfp_timestamps_decimated_bins, labels, pos_timestamps, is_discrete=True)
-            
+
             # Get binned position data for this flight
             flight_pos = binned_pos[timebin_labels > 0]
-
             if len(flight_pos) == 0:
                 continue  # Skip this flight if no valid positions are found
-
             # Determine feeder visited based on end position
             end_pos = flight_pos[-1]
             feeder = determine_feeder(end_pos)
-
             # Create flight data for all timebins of this flight
             flight_data = np.column_stack((
                 np.full(len(flight_pos), flight_count),
                 np.full(len(flight_pos), feeder),
                 flight_pos
             ))
-
             all_flight_data.append(flight_data)
-
     # Concatenate all flight data
     flightID = np.vstack(all_flight_data)
-
     return flightID
 
-import numpy as np
-from bat.get_data import get_flight_boolean_array
-from bat.helpers_bat import label_timebins
+
 
 def get_flightLFP(session, LFPs, valid_indices, lfp_timestamps_decimated_bins, pos_timestamps):
     """
