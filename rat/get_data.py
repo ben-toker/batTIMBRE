@@ -11,6 +11,9 @@ import os
 from scipy import io
 from scipy.stats import mode
 import pickle
+import hashlib
+from multiprocessing import Pool
+from functools import partial
 
 
 def get_behav(mat_file, fs=25,init_fs=1250):
@@ -152,54 +155,85 @@ def get_LFP(lfp_file, n_channels, init_fs, fs=25):
 
     return X
 
+def decimate_channel(channel_data, dec):
+    return channel_data[::dec]
+
 def get_LFP_from_mat(lfp_data, n_channels, init_fs, fs=25, use_cache=False, cache_dir='./lfp_cache'):
     """
     Decimates LFPs to desired sampling rate from a MATLAB file
-    Input:
-    lfp_data = LFP data array from MATLAB file
-    n_channels = number of channels in the data
-    init_fs = inital sampling rate of the data
-    fs = desired sampling rate (to decimate to)
-    use_cache = whether to use caching (default: False)
-    cache_dir = directory to store cache files (default: './lfp_cache')
-    Output:
-    X = formatted LFP data
     """
     if use_cache:
-        # Create cache directory if it doesn't exist
         os.makedirs(cache_dir, exist_ok=True)
+        cache_key = hashlib.md5(lfp_data.tobytes()).hexdigest()
+        cache_filename = os.path.join(cache_dir, f"{cache_key}-{n_channels}-{init_fs}-{fs}.npy")
         
-        # Generate a unique cache filename based on input parameters
-        cache_key = f"{hash(lfp_data.tobytes())}-{n_channels}-{init_fs}-{fs}"
-        cache_filename = os.path.join(cache_dir, f"{cache_key}.pkl")
-        
-        # Check if cache file exists
         if os.path.exists(cache_filename):
-            # Load cached result
-            with open(cache_filename, 'rb') as f:
-                return pickle.load(f)
+            return np.load(cache_filename, mmap_mode='r')
     
-    # If not using cache or cache miss, compute the result
     dec = int(init_fs / fs)
     n_samples = lfp_data.shape[1]
-    
-    # Determine number of channels to keep
     n_keep = min(255, n_channels) if n_channels > 192 else 192
-    
-    # Calculate final length of the decimated data
     final_length = math.ceil(n_samples / dec)
     
-    # Pre-allocate the array for the decimated data
-    X = np.zeros((final_length, n_keep), dtype=np.float32)
+    # Use memory mapping for large datasets
+    X = np.memmap(os.path.join(cache_dir, 'temp_memmap.dat'), dtype='float32', mode='w+', shape=(final_length, n_keep))
     
-    # Decimate each channel individually and store in the pre-allocated array
-    for channel in range(n_keep):
-        channel_data = lfp_data[channel, :]
-        X[:, channel] = decimate(channel_data, dec, axis=0)
+    # Parallel processing
+    with Pool() as pool:
+        decimate_func = partial(decimate_channel, dec=dec)
+        results = pool.map(decimate_func, [lfp_data[channel, :] for channel in range(n_keep)])
+    
+    for channel, result in enumerate(results):
+        X[:, channel] = result[:final_length]
     
     if use_cache:
-        # Save result to cache
-        with open(cache_filename, 'wb') as f:
-            pickle.dump(X, f)
+        np.save(cache_filename, X)
     
     return X
+
+def get_combined_LFP(lfp_mat, init_fs, fs=250, use_cache=False, cache_dir='./lfp_cache'):
+    """
+    Decimates and combines LFPs from two datasets
+    """
+    lfp_data_1 = lfp_mat['lfp'][0, 0]
+    lfp_data_2 = lfp_mat['lfp'][0, 1]
+    n_channels = lfp_data_1.shape[0]
+    
+    if use_cache:
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_key = hashlib.md5(lfp_data_1.tobytes() + lfp_data_2.tobytes()).hexdigest()
+        cache_filename = os.path.join(cache_dir, f"{cache_key}-{n_channels}-{init_fs}-{fs}.npy")
+        
+        if os.path.exists(cache_filename):
+            return np.load(cache_filename, mmap_mode='r')
+    
+    dec = int(init_fs / fs)
+    n_samples_1 = lfp_data_1.shape[1]
+    n_samples_2 = lfp_data_2.shape[1]
+    n_keep = min(255, n_channels) if n_channels > 192 else 192
+    final_length_1 = math.ceil(n_samples_1 / dec)
+    final_length_2 = math.ceil(n_samples_2 / dec)
+    
+    # Combine data before decimation
+    combined_data = np.concatenate((lfp_data_1, lfp_data_2), axis=1)
+    
+    # Use memory mapping for large datasets
+    X = np.memmap(os.path.join(cache_dir, 'temp_memmap.dat'), dtype='float32', mode='w+', 
+                  shape=(n_keep, final_length_1 + final_length_2))
+    
+    # Parallel processing
+    with Pool() as pool:
+        decimate_func = partial(decimate_channel, dec=dec)
+        results = pool.map(decimate_func, [combined_data[channel, :] for channel in range(n_keep)])
+    
+    for channel, result in enumerate(results):
+        X[channel, :] = result[:(final_length_1 + final_length_2)]
+    
+    # Transpose to match the original output shape
+    X = X.T
+    
+    if use_cache:
+        np.save(cache_filename, X)
+    
+    return X
+
