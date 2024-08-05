@@ -12,3 +12,4 @@ rat/.ipynb_checkpoints/
 rat/.DS_Store
 venv/
 yartsev.egg-info/
+lfp_cache/

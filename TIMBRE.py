@@ -3,8 +3,8 @@ Created on Tue Jan  2 14:54:42 2024
 
 @author: Gautam Agarwal
 """
+from keras import models, layers, optimizers, backend, constraints, activations, callbacks
 from keras.callbacks import EarlyStopping
-from keras import models, layers, optimizers, backend, constraints, activations
 import complexnn
 import numpy as np
 from keras import utils as np_utils
