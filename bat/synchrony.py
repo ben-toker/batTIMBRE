@@ -35,10 +35,9 @@ def test_synchronization(flightID, flightLFP, fs=25):
                 pos_data = pos_data[valid_indices]
                 
                 # Compute cross-correlation
-                correlation = signal.correlate(lfp_data, pos_data, mode='full')
-                lags = signal.correlation_lags(len(lfp_data), len(pos_data))
-                
-                # Convert lags to seconds
+                max_lag = int(5 * fs)  # 5 seconds max lag
+                correlation = signal.correlate(lfp_data, pos_data, mode='same', method='fft')
+                lags = np.arange(-max_lag, max_lag+1)
                 lags_sec = lags / fs
                 
                 # Find the lag with maximum correlation
@@ -62,11 +61,11 @@ def test_synchronization(flightID, flightLFP, fs=25):
     print(f"Average maximum correlation lag: {average_lag:.6f} seconds")
     print(f"Standard deviation of lags: {std_lag:.6f} seconds")
     
-    # Plot average cross-correlation for all flights
-    avg_correlation = np.zeros(2 * len(flightID) - 1)
-    avg_lags = signal.correlation_lags(len(flightID), len(flightID))
-    avg_lags_sec = avg_lags / fs
-    
+    max_lag = int(5 * fs)  # 5 seconds max lag
+    avg_correlation = np.zeros(2 * max_lag + 1)
+    lags = np.arange(-max_lag, max_lag+1)
+    avg_lags_sec = lags / fs
+
     for flight_num in unique_flights:
         flight_mask = flightID[:, 0] == flight_num
         avg_lfp_data = np.mean(np.abs(flightLFP[flightLFP[:, 0] == flight_num, 2:]), axis=1)
@@ -84,8 +83,23 @@ def test_synchronization(flightID, flightLFP, fs=25):
         
         # Compute cross-correlation
         flight_correlation = signal.correlate(avg_lfp_data, avg_pos_data, mode='full')
-        avg_correlation[:len(flight_correlation)] += flight_correlation[:len(avg_correlation)]
-    
+        
+        # Ensure the correlation array is centered and has the correct length
+        center = len(flight_correlation) // 2
+        start = max(0, center - max_lag)
+        end = min(len(flight_correlation), center + max_lag + 1)
+        flight_correlation_trimmed = flight_correlation[start:end]
+        
+        # Pad or trim to ensure consistent length
+        if len(flight_correlation_trimmed) < len(avg_correlation):
+            flight_correlation_trimmed = np.pad(flight_correlation_trimmed, 
+                                                (0, len(avg_correlation) - len(flight_correlation_trimmed)),
+                                                mode='constant')
+        elif len(flight_correlation_trimmed) > len(avg_correlation):
+            flight_correlation_trimmed = flight_correlation_trimmed[:len(avg_correlation)]
+        
+        avg_correlation += flight_correlation_trimmed
+
     avg_correlation /= len(unique_flights)
     
     plt.figure(figsize=(10, 5))
