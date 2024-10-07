@@ -211,53 +211,112 @@ def safe_accumarray(subs, vals, size=None, func=np.mean):
                     result[sub] = func([result[sub], vals[i]], axis=0)
     return result
 
-def test_train_bat(flightID, n_folds=5, which_fold=0, num_samples_at_end=5):
+def balanced_indices(labels, indices, random_state=None):
     """
-    Returns test and train samples for bat flight data.
+    Returns a balanced subset of indices with equal number of samples per class.
 
     Parameters:
-    - flightID: contains info about flight number, feeder visited, and positional data
-    - n_folds: how many folds to assign
-    - which_fold: which fold to return values for
-    - num_samples_at_end: number of samples at the end of each flight to use for classification
+    - labels: Array of labels corresponding to the indices.
+    - indices: Array of indices to select from.
+    - random_state: Seed for random number generator.
 
     Returns:
-    - train_inds: which samples to use for training model
-    - test_inds: which samples to use for testing model
+    - balanced_indices: Array of indices with balanced samples across classes.
     """
-    # Initialize variables
-    ctr = np.zeros(3)  # Assuming three classes: perch, feeder 1, feeder 2
-    fold_assign = -np.ones(flightID.shape[0])
-    
-    for i in range(int(np.max(flightID[:, 0])) + 1):
-        inds = flightID[:, 0] == i
-        if np.sum(inds):
-            # Use the last few samples of the current flight
-            flight_indices = np.where(inds)[0]
-            last_indices = flight_indices[-num_samples_at_end:]
-            feeder = int(flightID[last_indices[0], 1])
-            fold_assign[last_indices] = ctr[feeder] % n_folds
-            ctr[feeder] += 1
-    
-    test_inds = fold_assign == which_fold
-    train_inds = np.isin(fold_assign, np.arange(n_folds)) & ~test_inds
-    print(f"Initial train_inds (before balancing): {np.sum(train_inds)}")
-    
-    train_inds_balanced = balanced_indices(flightID[:, 1], train_inds)
-    print(f"Balanced train_inds: {len(train_inds_balanced)}")
-    
-    # Debug: Print the shapes to verify alignment
-    print(f"flightID length: {flightID.shape[0]}")
-    print(f"test_inds length: {np.sum(test_inds)}")
-    print(f"train_inds length: {np.sum(train_inds)}")
-    print(f"Balanced train_inds length: {len(train_inds_balanced)}")
-    
-    # Ensure `train_inds_balanced` are valid indices
+    from collections import defaultdict
+    import numpy as np
+
+    # Set random seed for reproducibility
+    rng = np.random.default_rng(random_state)
+
+    # Group indices by label
+    label_to_indices = defaultdict(list)
+    for idx in indices:
+        label = labels[np.where(indices == idx)[0][0]]
+        label_to_indices[label].append(idx)
+
+    # Find the minimum number of samples across all classes
+    min_samples = min(len(idxs) for idxs in label_to_indices.values())
+
+    # Collect balanced indices
+    balanced_indices = []
+    for idxs in label_to_indices.values():
+        idxs = np.array(idxs)
+        rng.shuffle(idxs)
+        balanced_indices.extend(idxs[:min_samples])
+
+    return np.array(balanced_indices)
+
+from sklearn.model_selection import StratifiedKFold
+
+def test_train_bat(flightID, n_folds=5, which_fold=0, num_samples_at_end=5):
+    """
+    Returns test and train samples for bat flight data using stratified k-fold cross-validation.
+
+    Parameters:
+    - flightID: numpy array with columns:
+        Column 0: Flight Number
+        Column 1: Flight Type (0 to 6)
+        Column 2-4: Positional data (X, Y, Z)
+    - n_folds: Number of folds for cross-validation
+    - which_fold: Index of the fold to use as the test set
+    - num_samples_at_end: Number of samples at the end of each flight to use for classification
+
+    Returns:
+    - test_inds: Indices of samples to use for testing
+    - train_inds: Indices of samples to use for training
+    """
+    # Map flight numbers to flight types
+    flight_numbers = np.unique(flightID[:, 0]).astype(int)
+    flight_types = []
+    for flight_num in flight_numbers:
+        inds = flightID[:, 0] == flight_num
+        flight_type = int(flightID[inds][0, 1])
+        flight_types.append(flight_type)
+
+    flight_types = np.array(flight_types)
+
+    # Use Stratified K-Fold to split flights into folds, ensuring balance across flight types
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+    splits = list(skf.split(flight_numbers, flight_types))
+
+    # Get train and test flight numbers for the specified fold
+    train_flight_nums = flight_numbers[splits[which_fold][0]]
+    test_flight_nums = flight_numbers[splits[which_fold][1]]
+
+    # Collect sample indices for train and test sets
+    train_inds = []
+    for flight_num in train_flight_nums:
+        inds = np.where(flightID[:, 0] == flight_num)[0]
+        last_indices = inds[-num_samples_at_end:]
+        train_inds.extend(last_indices)
+
+    test_inds = []
+    for flight_num in test_flight_nums:
+        inds = np.where(flightID[:, 0] == flight_num)[0]
+        last_indices = inds[-num_samples_at_end:]
+        test_inds.extend(last_indices)
+
+    train_inds = np.array(train_inds)
+    test_inds = np.array(test_inds)
+
+    # Balance the training indices across flight types
+    train_labels = flightID[train_inds, 1]
+    train_inds_balanced = balanced_indices(train_labels, train_inds)
+
+    # Debug statements to verify the process
+    print(f"Total samples: {flightID.shape[0]}")
+    print(f"Test samples: {len(test_inds)}")
+    print(f"Train samples before balancing: {len(train_inds)}")
+    print(f"Train samples after balancing: {len(train_inds_balanced)}")
+
+    # Ensure indices are within bounds
     if np.any(train_inds_balanced >= flightID.shape[0]) or np.any(test_inds >= flightID.shape[0]):
         print("Error: Indices out of bounds")
     else:
         print("All indices are within bounds")
-    
+
     return test_inds, train_inds_balanced
+
 
 
