@@ -6,9 +6,9 @@ Welcome to the batTIMBRE project! This repository is dedicated to applying the [
 
 ## Files of note
 - `bat_TIMBRE.ipynb` is where all the most important operations are done. From preprocessing to the final execution of TIMBRE on the bat data, it's all here and (to some extent) explained step by step.
-- `bat/example.ipynb` is an example notebook of how we can access the bat data and different graphs displaying the nature of the flight paths. It explains that the flight paths are separated by cluster, how the flight paths look in 3D space, and shows cluster position over time. 
-- `bat/helpers_bat.py` contains all the helper methods developed for analyses on the bat data.
-- `rat/LFP_demo.ipynb` is directly taken from the `TIMBRE` repository (listed above) - this shows how TIMBRE was applied to the rat data.  Compare this to the final cell in `bat_TIMBRE.ipynb` and we can see how these analyses differ. `LFP_demo` has been trimmed and has extra debug statements added for more relevant comparison.
+- `dataset.py` is the code provided by the Yartsev lab for easily accessing their flight data. The example notebook (next bulletpoint) shows how to work with these.
+- `example.ipynb` is an example notebook of how we can access the bat data and different graphs displaying the nature of the flight paths. It explains that the flight paths are separated by cluster, how the flight paths look in 3D space, and shows cluster position over time. Thank you Kevin Qi!
+- `helpers.py` contains all the helper methods developed for analyses on the bat data.
 
 # Goals with this project
 - Our end goal is training TIMBRE on the bats' LFP (local field potential) and flight path data to see if LFP encodes position, as there is a precedent with carrier-free decoding in rats (see [References](#references)).
