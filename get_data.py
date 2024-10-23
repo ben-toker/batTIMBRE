@@ -1,12 +1,14 @@
+import math
+import os
 import numpy as np
 from numba import jit
 import pickle
 import hashlib
+from scipy.signal import decimate
 from multiprocessing import Pool
 from functools import partial
 from helpers import label_timebins
 from helpers import interpolate_nans
-from helpers import get_LFP_from_mat
 from scipy.stats import mode
 from dataset import FlightRoomSession
 import hdf5storage
@@ -90,6 +92,62 @@ def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, use_cache=True)
     
     return lfp_bat_combined
 
+# Decimate function defined at the global level for parallel processing
+def decimate_func(channel_data, dec):
+    """
+    Decimates the channel data using scipy.signal.decimate.
+    Args:
+        channel_data (numpy.ndarray): The data for a single channel.
+        dec (int): The decimation factor.
+    Returns:
+        numpy.ndarray: The decimated data.
+    """
+    return decimate(channel_data, dec, ftype='fir', zero_phase=True)
+
+def get_LFP_from_mat(lfp_data, n_channels, init_fs, fs=25, use_cache=False, cache_dir='./lfp_cache'):
+    """
+    Decimates LFPs to the desired sampling rate from a MATLAB file.
+    
+    Args:
+        lfp_data (numpy.ndarray): The LFP data array from the MATLAB file.
+        n_channels (int): Number of channels in the data.
+        init_fs (int): Initial sampling rate of the LFP data (e.g., 2500 Hz).
+        fs (int): Desired final sampling rate (default is 25 Hz).
+        use_cache (bool): Whether to use cached data.
+        cache_dir (str): Directory to store cache files.
+        
+    Returns:
+        Decimated LFP data (numpy.ndarray).
+    """
+    
+    if use_cache:
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_key = hashlib.md5(lfp_data.tobytes()).hexdigest()
+        cache_filename = os.path.join(cache_dir, f"{cache_key}-{n_channels}-{init_fs}-{fs}.npy")
+        
+        if os.path.exists(cache_filename):
+            return np.load(cache_filename, mmap_mode='r')
+    
+    # Compute decimation factor
+    dec = int(init_fs / fs)
+    n_samples = lfp_data.shape[1]
+    n_keep = min(255, n_channels) if n_channels > 192 else 192
+    final_length = int(np.ceil(n_samples / dec))
+    
+    # Use memory mapping for large datasets
+    X = np.memmap(os.path.join(cache_dir, 'temp_memmap.dat'), dtype='float32', mode='w+', shape=(final_length, n_keep))
+    
+    # Parallel processing for decimation
+    with Pool() as pool:
+        results = pool.starmap(decimate_func, [(lfp_data[channel, :], dec) for channel in range(n_keep)])
+    
+    for channel, result in enumerate(results):
+        X[:, channel] = result[:final_length]
+    
+    if use_cache:
+        np.save(cache_filename, X)
+    
+    return X
 
 
 def get_cluster_labels(session, cluster):
