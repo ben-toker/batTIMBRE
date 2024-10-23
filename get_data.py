@@ -4,7 +4,9 @@ import pickle
 import hashlib
 from multiprocessing import Pool
 from functools import partial
-from bat.helpers_bat import label_timebins
+from helpers_bat import label_timebins
+from scipy.stats import mode
+
 """
 A set of helper functions for downloading and preprocessing flight path data.
 
@@ -312,9 +314,6 @@ def get_flightLFP(session, LFPs, valid_indices, lfp_timestamps_decimated_bins, p
     print(f"\nFinal flightLFP shape: {flightLFP.shape}")
     return flightLFP
 
-def decimate_channel(channel_data, dec):
-    return channel_data[::dec]
-
 def get_combined_LFP(lfp_mat, init_fs, fs=250, use_cache=False, cache_dir='./lfp_cache'):
     """
     Decimates and combines LFPs from two datasets
@@ -347,7 +346,7 @@ def get_combined_LFP(lfp_mat, init_fs, fs=250, use_cache=False, cache_dir='./lfp
     
     # Parallel processing
     with Pool() as pool:
-        decimate_func = partial(decimate_channel, dec=dec)
+        decimate_func = partial(decimate, dec=dec)
         results = pool.map(decimate_func, [combined_data[channel, :] for channel in range(n_keep)])
     
     for channel, result in enumerate(results):
@@ -360,3 +359,18 @@ def get_combined_LFP(lfp_mat, init_fs, fs=250, use_cache=False, cache_dir='./lfp
         np.save(cache_filename, X)
     
     return X
+
+def longest_stretch(bool_array):
+    """
+    Finds longest contiguous stretch of True values
+
+    Input:
+    bool_array = boolean vector
+
+    Output:
+    bool_most_common = boolean vector, True only for longest stretch of 'True' in bool_array
+    """
+    bool_array_diff = np.append(bool_array[0], bool_array)
+    bool_array_diff = np.cumsum(np.abs(np.diff(bool_array_diff)))
+    bool_most_common = bool_array_diff == mode(bool_array_diff[bool_array])[0]
+    return bool_most_common

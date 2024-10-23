@@ -124,9 +124,10 @@ def plot_raw_lfp(LFPs, n_channels=5, start_time=0, end_time=1000, fs=25):
     plt.figure(figsize=(10, 5))
 
     for i in range(n_channels):
-        plt.plot(time, LFPs[start_time:end_time, i] + i * 200)
+        plt.plot(time, LFPs[start_time:end_time, i]+ i * 200)
 
     plt.xlabel('Time (s)')
     plt.ylabel('Amplitude (offset for visibility)')
     plt.title('LFP Data Visualization (Reals after Hilbert Transform)')
     plt.show()
+    
