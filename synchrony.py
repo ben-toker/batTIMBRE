@@ -2,6 +2,60 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 
+
+import numpy as np
+from scipy.signal import decimate
+from helpers import label_timebins
+
+def sync_and_bin_data(lfp_mat, session):
+    """
+    Synchronizes the LFP and positional data, decimates LFP timestamps, and bins positional data accordingly.
+    
+    Args:
+        lfp_mat (dict): The loaded LFP MATLAB data.
+        session (FlightRoomSession): The session object containing bat positional data.
+    
+    Returns:
+        lfp_timestamps_edges (numpy.ndarray): The edges of the LFP time bins.
+        binned_pos (numpy.ndarray): The positional data binned according to LFP time bins.
+    """
+    
+    # Extract LFP timestamps in microseconds
+    lfp_timestamps = lfp_mat['global_sample_timestamps_usec']
+    print(f"LFP timestamps structure: {lfp_timestamps.shape}")
+    
+    # Decimate LFP timestamps from 2500 Hz to 25 Hz (100x decimation)
+    lfp_timestamps_dec = decimate(lfp_timestamps.flatten(), 100)
+    print(f"Decimated LFP timestamps shape: {lfp_timestamps_dec.shape}")
+    
+    # Lop off negative timestamps and prepare the LFP timestamp edges
+    lfp_indices = lfp_timestamps_dec > 0  # Filter out negative timestamps
+    lfp_timestamps_dec = lfp_timestamps_dec[lfp_indices]
+    lfp_timestamps_edges = np.insert(lfp_timestamps_dec, 0, 0)  # Insert 0 at the beginning for proper binning
+    print(f"LFP timestamp edges shape: {lfp_timestamps_edges.shape}")
+
+    # Extract and clean positional data timestamps (convert to microseconds)
+    pos_timestamps = session.cortex_data.cortex_global_sample_timestamps_sec * 1e6
+    valid_indices = pos_timestamps > 0  # Filter out negative timestamps
+    pos_timestamps = pos_timestamps[valid_indices]
+    print(f"Positional timestamp diff (microseconds): {np.diff(pos_timestamps)}")  
+    
+    # Clean the corresponding positional data
+    cleaned_pos = session.cortex_data.bat_pos[valid_indices]
+    print(f"Cleaned positional data shape: {cleaned_pos.shape}")
+
+    # Bin positional data using the provided label_timebins function
+    binned_pos_x = label_timebins(lfp_timestamps_edges, cleaned_pos[:, 0], pos_timestamps, is_discrete=False)
+    binned_pos_y = label_timebins(lfp_timestamps_edges, cleaned_pos[:, 1], pos_timestamps, is_discrete=False)
+    binned_pos_z = label_timebins(lfp_timestamps_edges, cleaned_pos[:, 2], pos_timestamps, is_discrete=False)
+    
+    # Combine the binned positional data into a single array
+    binned_pos = np.column_stack((binned_pos_x, binned_pos_y, binned_pos_z))
+    print(f"Binned positional data shape: {binned_pos.shape}")
+    
+    return lfp_timestamps_edges, binned_pos, pos_timestamps, lfp_indices, valid_indices
+
+
 def test_synchronization(flightID, flightLFP, fs=25):
     """
     Tests the synchronization between LFP data and positional data for each flight
