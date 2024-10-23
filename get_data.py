@@ -4,8 +4,11 @@ import pickle
 import hashlib
 from multiprocessing import Pool
 from functools import partial
-from helpers_bat import label_timebins
+from helpers import label_timebins
+from helpers import interpolate_nans
 from scipy.stats import mode
+from dataset import FlightRoomSession
+import hdf5storage
 
 """
 A set of helper functions for downloading and preprocessing flight path data.
@@ -13,6 +16,45 @@ A set of helper functions for downloading and preprocessing flight path data.
 @author: Ben Toker
 @author: Kevin Qi 
 """
+
+def load_and_clean_bat_data(data_path, bat_id, date, lfp_file_path, use_cache=True):
+    """
+    Loads the LFP data and positional data for a given bat, cleans the positional data
+    by interpolating NaN values, and returns the LFP data and cleaned positional data.
+    
+    Args:
+        data_path (str): Path to the directory containing the bat data.
+        bat_id (str): ID of the bat.
+        date (str): Date of the recording.
+        lfp_file_path (str): Path to the LFP data file.
+        use_cache (bool): Whether to use cached data for the flight room session.
+        
+    Returns:
+        lfp_data (numpy.ndarray): The loaded LFP data.
+        cleaned_pos (numpy.ndarray): The cleaned positional data with NaN values interpolated.
+    """
+    
+    # Load bat LFP data
+    lfp_mat = hdf5storage.loadmat(lfp_file_path)
+    lfp_data = lfp_mat['lfp']
+    print(f"Structure of lfp_data: {type(lfp_data)}, {lfp_data.shape}")
+    
+    # Load bat positional data
+    session = FlightRoomSession(data_path, bat_id, date, use_cache=use_cache)
+    pos = session.cortex_data.bat_pos
+    print(f"Positional data shape: {pos.shape}")
+
+    # Clean positional data by interpolating NaN values
+    cleaned_pos = np.copy(pos)
+    cleaned_pos[:, 0] = interpolate_nans(pos[:, 0])
+    cleaned_pos[:, 1] = interpolate_nans(pos[:, 1])
+    cleaned_pos[:, 2] = interpolate_nans(pos[:, 2])
+    print(f"Cleaned positional data shape: {cleaned_pos.shape}")
+    
+    return lfp_mat, cleaned_pos
+
+
+
 def get_cluster_labels(session, cluster):
     flight_behavior = session.cortex_data
     labels = np.full([flight_behavior.num_cortex_timebins], 0)
