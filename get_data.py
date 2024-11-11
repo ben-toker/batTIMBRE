@@ -56,40 +56,47 @@ def load_and_clean_bat_data(data_path, bat_id, date, lfp_file_path, use_cache=Tr
     
     return lfp_mat, cleaned_pos, session
 
-def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, use_cache=True):
+def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, use_cache=True, cache_file_path = 'lfp_bat_combined_cache.npy'):
     """
     Extracts LFP data from the specified MATLAB file, downsamples the data, and combines the channels.
     
     Args:
-        lfp_file_path (str): Path to the LFP data file.
+        lfp_mat (dict): MATLAB data structure containing LFP data.
         sampling_rate (int): Original sampling rate of the LFP data. Default is 2500 Hz.
         use_cache (bool): Whether to use cached data for LFP extraction and decimation.
         
     Returns:
         lfp_bat_combined (numpy.ndarray): The downsampled LFP data combined across channels.
     """
-    
+
+    # Check if cache should be used and if the file exists
+    if use_cache and os.path.exists(cache_file_path):
+        print("Loading cached LFP data...")
+        lfp_bat_combined = np.load(cache_file_path)
+        print(f"LFP combined shape: {lfp_bat_combined.shape}")
+        return lfp_bat_combined
+
     # Extract subarrays for LFP data
     lfp_data_1 = lfp_mat['lfp'][0, 0]
     lfp_data_2 = lfp_mat['lfp'][0, 1]
     n_channels = lfp_data_1.shape[0]
-    
+
     print(f"Type of lfp_data_1: {type(lfp_data_1)}, Shape of lfp_data_1: {lfp_data_1.shape}")
     print(f"Type of lfp_data_2: {type(lfp_data_2)}, Shape of lfp_data_2: {lfp_data_2.shape}")
     print(f"Number of channels per array: {n_channels}")
 
-    # We have raw MATLAB data fields stored in `lfp_data_1` and `lfp_data_2`, 
-    # but in order to actually work with this data, we need to deserialize it into an array we can index. 
-    # To do this, I've supplied `helpers.py/get_LFP_from_mat`, which will import and decimate the data. 
-
     # Downsample LFP data using get_LFP_from_mat
     lfp_bat_1 = get_LFP_from_mat(lfp_data_1, n_channels, sampling_rate, use_cache=use_cache)
     lfp_bat_2 = get_LFP_from_mat(lfp_data_2, n_channels, sampling_rate, use_cache=use_cache)
-    
+
     # Combine the downsampled LFP data
-    lfp_bat_combined = np.concatenate((lfp_bat_1, lfp_bat_2), axis=1) #ALREADY DECIMATED to 25 Hz
+    lfp_bat_combined = np.concatenate((lfp_bat_1, lfp_bat_2), axis=1)  # Already decimated to 25 Hz
     print(f"LFP combined shape: {lfp_bat_combined.shape}")
-    
+
+    # Save the combined LFP data to cache
+    print("Saving LFP data to cache...")
+    np.save(cache_file_path, lfp_bat_combined)
+
     return lfp_bat_combined
 
 # Decimate function defined at the global level for parallel processing
