@@ -1,13 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
-
-
-import numpy as np
+from helpers import interpolate_nans
 from scipy.signal import decimate
 from helpers import label_timebins
 
-def sync_and_bin_data(lfp_mat, session):
+def sync_and_bin_data(lfp_mat, session,cleaned_pos):
     """
     Synchronizes the LFP and positional data, decimates LFP timestamps, and bins positional data accordingly.
     
@@ -31,6 +29,7 @@ def sync_and_bin_data(lfp_mat, session):
     # Lop off negative timestamps and prepare the LFP timestamp edges
     lfp_indices = lfp_timestamps_dec > 0  # Filter out negative timestamps
     lfp_timestamps_dec = lfp_timestamps_dec[lfp_indices]
+    lfp_timestamps_dec >= session.cortex_data.cortex_global_sample_timestamps_sec.min() * 1e6
     lfp_timestamps_edges = np.insert(lfp_timestamps_dec, 0, 0)  # Insert 0 at the beginning for proper binning
     print(f"LFP timestamp edges shape: {lfp_timestamps_edges.shape}")
 
@@ -41,7 +40,7 @@ def sync_and_bin_data(lfp_mat, session):
     print(f"Positional timestamp diff (microseconds): {np.diff(pos_timestamps)}")  
     
     # Clean the corresponding positional data
-    cleaned_pos = session.cortex_data.bat_pos[valid_indices]
+    cleaned_pos = cleaned_pos[valid_indices]
     print(f"Cleaned positional data shape: {cleaned_pos.shape}")
 
     # Bin positional data using the provided label_timebins function

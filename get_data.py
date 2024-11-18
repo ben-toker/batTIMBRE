@@ -227,39 +227,24 @@ def get_flight_boolean_array(session, global_flight_number, off_samples=0):
     
     raise ValueError(f"Invalid flight number. Must be between 1 and {flight_count}")
 
-def get_flightID_modified(session, binned_pos, valid_indices, lfp_timestamps_decimated_bins, pos_timestamps):
-    flightID = np.zeros((len(binned_pos), 5), dtype=float)  # Initialize with non-flight state
-    flightID[:, 1] = -1  # Set feeder visited to -1 for non-flight periods
-    flightID[:, 2:5] = binned_pos  # Set position data for all time points
-    
-    flight_count = 0
-    for cluster_id in session.flights_by_cluster.keys():
-        if cluster_id == 1:  # Skip unstructured flights if desired
-            continue
-        for flight in session.get_flights_by_cluster([cluster_id]):
-            flight_count += 1
-            flight_bool, _ = get_flight_boolean_array(session, flight_count)
-            labels = flight_bool[valid_indices]
-            timebin_labels = label_timebins(lfp_timestamps_decimated_bins, labels, pos_timestamps, is_discrete=True)
-            
-            flight_indices = np.where(timebin_labels > 0)[0]
-            if len(flight_indices) > 0:
-                flightID[flight_indices, 0] = flight_count
-                flightID[flight_indices, 1] = determine_feeder(binned_pos[flight_indices[-1], :])
-    
-    return flightID
 
 @jit(nopython=True)
 def determine_feeder(pos):
-        # Determine the feeder or perch based on position
-        if pos[1] > 0 and pos[0] < 0:
-            return 'perch'       # perch
-        elif pos[1] > 0 and pos[0] > 0:
-            return 'feeder1'     # feeder 1
-        elif pos[1] < 0 and pos[0] > 0:
-            return 'feeder2'     # feeder 2
-        else:
-            return 'unknown'     # unknown
+    # pos[0] = X, pos[1] = Y, pos[2] = Z
+    x = pos[0]
+    y = pos[1]
+    z = pos[2]
+    
+    # Expanded thresholds to cover the wider distribution
+    if x < -1.0 and y > 1.0 and z > 1.0:
+        return 'perch'  # Perch with consideration for higher Z values
+    elif x > 1.0 and -1.0 < y < 2.0:
+        return 'feeder1'  # Feeder 1 with a broader Y range
+    elif x > 1.0 and y < -1.0:
+        return 'feeder2'  # Feeder 2 with a similar X but broader Y range
+    else:
+        return 'unknown'  # Unknown if outside defined regions
+
 
 def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bins, pos_timestamps, off_samples=0):
     """
@@ -298,6 +283,7 @@ def get_flightID(session, binned_pos, valid_indices, lfp_timestamps_decimated_bi
         # Use determine_feeder to get start and end locations
         start_location = determine_feeder(start_pos)
         end_location = determine_feeder(end_pos)
+        #print(f"Start Location: {start_location}, End Location: {end_location}")
 
         # Assign flight type code based on start and end locations
         if start_location == 'perch' and end_location == 'feeder1':
