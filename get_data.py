@@ -227,7 +227,6 @@ def get_flight_boolean_array(session, global_flight_number, off_samples=0):
     
     raise ValueError(f"Invalid flight number. Must be between 1 and {flight_count}")
 
-
 @jit(nopython=True)
 def determine_feeder(pos):
     # pos[0] = X, pos[1] = Y, pos[2] = Z
