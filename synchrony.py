@@ -5,13 +5,14 @@ from helpers import interpolate_nans
 from scipy.signal import decimate
 from helpers import label_timebins
 
-def sync_and_bin_data(lfp_mat, session,cleaned_pos):
+def sync_and_bin_data(lfp_mat, session, cleaned_pos, fs=25):
     """
     Synchronizes the LFP and positional data, decimates LFP timestamps, and bins positional data accordingly.
     
     Args:
         lfp_mat (dict): The loaded LFP MATLAB data.
         session (FlightRoomSession): The session object containing bat positional data.
+        fs (int): Desired sampling frequency after decimation.
     
     Returns:
         lfp_timestamps_edges (numpy.ndarray): The edges of the LFP time bins.
@@ -22,8 +23,13 @@ def sync_and_bin_data(lfp_mat, session,cleaned_pos):
     lfp_timestamps = lfp_mat['global_sample_timestamps_usec']
     print(f"LFP timestamps structure: {lfp_timestamps.shape}")
     
-    # Decimate LFP timestamps from 2500 Hz to 25 Hz (100x decimation)
-    lfp_timestamps_dec = decimate(lfp_timestamps.flatten(), 100)
+    # Calculate the decimation factor based on the desired sampling rate
+    original_fs = 2500  # Original sampling frequency in Hz
+    decimation_factor = int(original_fs // fs)
+    print(f"Decimation factor: {decimation_factor}")
+    
+    # Decimate LFP timestamps
+    lfp_timestamps_dec = decimate(lfp_timestamps.flatten(), decimation_factor)
     print(f"Decimated LFP timestamps shape: {lfp_timestamps_dec.shape}")
     
     # Lop off negative timestamps and prepare the LFP timestamp edges

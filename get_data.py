@@ -56,13 +56,14 @@ def load_and_clean_bat_data(data_path, bat_id, date, lfp_file_path, use_cache=Tr
     
     return lfp_mat, cleaned_pos, session
 
-def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, use_cache=True, cache_file_path = 'lfp_bat_combined_cache.npy'):
+def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, dfs=25, use_cache=True, cache_file_path = 'lfp_bat_combined_cache.npy'):
     """
     Extracts LFP data from the specified MATLAB file, downsamples the data, and combines the channels.
     
     Args:
         lfp_mat (dict): MATLAB data structure containing LFP data.
         sampling_rate (int): Original sampling rate of the LFP data. Default is 2500 Hz.
+        dfs (int): Desired final sampling rate after downsampling. Default is 25 Hz.
         use_cache (bool): Whether to use cached data for LFP extraction and decimation.
         
     Returns:
@@ -86,8 +87,8 @@ def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, use_cache=True,
     print(f"Number of channels per array: {n_channels}")
 
     # Downsample LFP data using get_LFP_from_mat
-    lfp_bat_1 = get_LFP_from_mat(lfp_data_1, n_channels, sampling_rate, use_cache=use_cache)
-    lfp_bat_2 = get_LFP_from_mat(lfp_data_2, n_channels, sampling_rate, use_cache=use_cache)
+    lfp_bat_1 = get_LFP_from_mat(lfp_data_1, n_channels, sampling_rate, dfs, use_cache=use_cache)
+    lfp_bat_2 = get_LFP_from_mat(lfp_data_2, n_channels, sampling_rate, dfs, use_cache=use_cache)
 
     # Combine the downsampled LFP data
     lfp_bat_combined = np.concatenate((lfp_bat_1, lfp_bat_2), axis=1)  # Already decimated to 25 Hz
