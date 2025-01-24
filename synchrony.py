@@ -7,30 +7,37 @@ from helpers import label_timebins
 
 def sync_and_bin_data(lfp_mat, session, cleaned_pos, fs=25):
     """
-    Synchronizes the LFP and positional data, decimates LFP timestamps, and bins positional data accordingly.
+    Synchronizes the LFP and positional data, optionally decimates LFP timestamps, and bins positional data accordingly.
     
     Args:
         lfp_mat (dict): The loaded LFP MATLAB data.
         session (FlightRoomSession): The session object containing bat positional data.
+        cleaned_pos (numpy.ndarray): The cleaned positional data.
         fs (int): Desired sampling frequency after decimation.
     
     Returns:
         lfp_timestamps_edges (numpy.ndarray): The edges of the LFP time bins.
         binned_pos (numpy.ndarray): The positional data binned according to LFP time bins.
     """
-    
     # Extract LFP timestamps in microseconds
     lfp_timestamps = lfp_mat['global_sample_timestamps_usec']
     print(f"LFP timestamps structure: {lfp_timestamps.shape}")
     
-    # Calculate the decimation factor based on the desired sampling rate
-    original_fs = 2500  # Original sampling frequency in Hz
-    decimation_factor = int(original_fs // fs)
-    print(f"Decimation factor: {decimation_factor}")
+    # Original sampling frequency in Hz
+    original_fs = 2500  
     
-    # Decimate LFP timestamps
-    lfp_timestamps_dec = decimate(lfp_timestamps.squeeze(), decimation_factor)
-    print(f"Decimated LFP timestamps shape: {lfp_timestamps_dec.shape}")
+    # Determine if decimation is needed
+    if fs == original_fs:
+        print("Using raw data without decimation.")
+        lfp_timestamps_dec = lfp_timestamps.squeeze()
+    else:
+        # Calculate the decimation factor
+        decimation_factor = int(original_fs // fs)
+        print(f"Decimation factor: {decimation_factor}")
+        
+        # Decimate LFP timestamps
+        lfp_timestamps_dec = decimate(lfp_timestamps.squeeze(), decimation_factor)
+        print(f"Decimated LFP timestamps shape: {lfp_timestamps_dec.shape}")
     
     # Lop off negative timestamps and prepare the LFP timestamp edges
     lfp_indices = lfp_timestamps_dec > 0  # Filter out negative timestamps
@@ -59,6 +66,7 @@ def sync_and_bin_data(lfp_mat, session, cleaned_pos, fs=25):
     print(f"Binned positional data shape: {binned_pos.shape}")
     
     return lfp_timestamps_edges, binned_pos, pos_timestamps, lfp_indices, valid_indices
+
 
 
 def test_synchronization(flightID, flightLFP, fs=25):
