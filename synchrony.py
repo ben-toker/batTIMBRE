@@ -29,7 +29,7 @@ def sync_and_bin_data(lfp_mat, session, cleaned_pos, fs=25):
     print(f"Decimation factor: {decimation_factor}")
     
     # Decimate LFP timestamps
-    lfp_timestamps_dec = decimate(lfp_timestamps.flatten(), decimation_factor)
+    lfp_timestamps_dec = decimate(lfp_timestamps.squeeze(), decimation_factor)
     print(f"Decimated LFP timestamps shape: {lfp_timestamps_dec.shape}")
     
     # Lop off negative timestamps and prepare the LFP timestamp edges
