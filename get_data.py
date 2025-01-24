@@ -173,15 +173,14 @@ def get_cluster_labels(session, cluster):
     
     return labels
 
-def get_flight_boolean_array(session, global_flight_number, off_samples=0):
+def get_flight_boolean_array(session, cluster_id, cluster_flight_number, off_samples=0):
     """
-    Generate a boolean array for a specific flight across all clusters and return its cluster ID
-    and phase labels (pre, in, post flight).
+    Generate a boolean array for a specific flight within a given cluster and return its phase labels.
 
     Input:
     - session: A session object containing flight data and cluster information.
-    - global_flight_number: An integer representing the overall flight number to retrieve,
-      counting sequentially across all clusters (excluding cluster 1).
+    - cluster_id: An integer representing the cluster ID to retrieve the flight from.
+    - cluster_flight_number: An integer representing the flight number within the specified cluster.
     - off_samples: Number of samples to include before and after the flight.
 
     Output:
@@ -189,44 +188,39 @@ def get_flight_boolean_array(session, global_flight_number, off_samples=0):
       corresponding to the specified flight.
     - phase_labels: A numpy array with values indicating phase: 0 for pre-flight,
       1 for in-flight, and 2 for post-flight.
-    - cluster_id: An integer representing the cluster ID of the specified flight.
+    - cluster_id: The cluster ID of the flight (same as the input cluster_id).
 
     Raises:
-    - ValueError: If the global_flight_number is invalid (i.e., higher than the total
-      number of flights across all clusters).
-
-    Note:
-    - Cluster 1 is excluded from the count.
-    - Flights are counted sequentially across clusters in ascending order of cluster IDs.
+    - ValueError: If the cluster or flight number is invalid.
     """
     flight_behavior = session.cortex_data
     boolean_array = np.zeros(flight_behavior.num_cortex_timebins, dtype=bool)
     phase_labels = np.full(flight_behavior.num_cortex_timebins, -1, dtype=int)  # Initialize with -1 for unused samples
-    
-    all_clusters = sorted([int(cluster_id) for cluster_id in session.flights_by_cluster.keys() if int(cluster_id) != 1])
-    
-    flight_count = 0
-    for cluster_id in all_clusters:
-        cluster_flights = session.get_flights_by_cluster([cluster_id])
-        for flight in cluster_flights:
-            flight_count += 1
-            if flight_count == global_flight_number:
-                start_idx, end_idx = flight.timebin_start_idx, flight.timebin_end_idx
-                pre_start_idx = max(start_idx - off_samples, 0)
-                post_end_idx = min(end_idx + off_samples, flight_behavior.num_cortex_timebins)
-                boolean_array[pre_start_idx:post_end_idx] = True
 
-                # Set phase labels
-                if off_samples > 0:
-                    phase_labels[pre_start_idx:start_idx] = 0  # pre-flight
-                    phase_labels[start_idx:end_idx] = 1  # in-flight
-                    phase_labels[end_idx:post_end_idx] = 2  # post-flight
-                else:
-                    phase_labels[start_idx:end_idx] = 1  # in-flight
-
-                return boolean_array, phase_labels, cluster_id
+    # Retrieve flights for the specified cluster
+    cluster_flights = session.get_flights_by_cluster([cluster_id])
     
-    raise ValueError(f"Invalid flight number. Must be between 1 and {flight_count}")
+    # Validate cluster_flight_number
+    if cluster_flight_number < 1 or cluster_flight_number > len(cluster_flights):
+        raise ValueError(f"Invalid cluster flight number. Must be between 1 and {len(cluster_flights)}.")
+
+    # Get the specified flight
+    flight = cluster_flights[cluster_flight_number - 1]  # Convert 1-based to 0-based index
+    start_idx, end_idx = flight.timebin_start_idx, flight.timebin_end_idx
+    pre_start_idx = max(start_idx - off_samples, 0)
+    post_end_idx = min(end_idx + off_samples, flight_behavior.num_cortex_timebins)
+
+    # Set boolean array and phase labels
+    boolean_array[pre_start_idx:post_end_idx] = True
+    if off_samples > 0:
+        phase_labels[pre_start_idx:start_idx] = 0  # pre-flight
+        phase_labels[start_idx:end_idx] = 1  # in-flight
+        phase_labels[end_idx:post_end_idx] = 2  # post-flight
+    else:
+        phase_labels[start_idx:end_idx] = 1  # in-flight
+
+    return boolean_array, phase_labels, cluster_id
+
 
 @jit(nopython=True)
 def determine_feeder(pos):
