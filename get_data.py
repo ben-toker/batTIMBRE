@@ -219,8 +219,7 @@ def get_flight_boolean_array(session, cluster_id, cluster_flight_number, off_sam
     else:
         phase_labels[start_idx:end_idx] = 1  # in-flight
 
-    return boolean_array, phase_labels, cluster_id
-
+    return boolean_array, phase_labels
 
 @jit(nopython=True)
 def determine_feeder(pos):
