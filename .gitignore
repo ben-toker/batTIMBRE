@@ -7,4 +7,5 @@ __pycache__/
 venv/
 yartsev.egg-info/
 lfp_cache/
+lfp_pos_cache/
 lfp_bat_combined_cache.npy

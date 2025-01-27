@@ -4,6 +4,7 @@ import numpy as np
 from numba import jit
 import pickle
 import hashlib
+from scipy.interpolate import interp1d
 from scipy.signal import decimate
 from multiprocessing import Pool
 from functools import partial
@@ -19,6 +20,86 @@ A set of helper functions for downloading and preprocessing flight path data.
 @author: Ben Toker
 @author: Kevin Qi 
 """
+def load_and_align_lfp_and_pos(data_path, bat_id, date, lfp_file_path, use_cache=True, cache_dir='./lfp_pos_cache'):
+    """
+    Loads LFP data from two probes, cleans and interpolates positional data, and aligns them into a combined structure.
+
+    Args:
+        data_path (str): Path to the directory containing the bat data.
+        bat_id (str): ID of the bat.
+        date (str): Date of the recording.
+        lfp_file_path (str): Path to the LFP data file.
+        use_cache (bool): Whether to use cached data.
+        cache_dir (str): Directory for caching aligned data.
+
+    Returns:
+        np.ndarray: A single array with columns for timestamps, LFP data, and position (x, y, z).
+    """
+    # Create cache directory if it doesn't exist
+    os.makedirs(cache_dir, exist_ok=True)
+
+    # Generate a unique cache key for this dataset
+    cache_key = hashlib.md5(f"{bat_id}_{date}_{lfp_file_path}".encode()).hexdigest()
+    cache_file = os.path.join(cache_dir, f"{cache_key}_aligned_data.npy")
+
+    # Load from cache if available
+    if use_cache and os.path.exists(cache_file):
+        print(f"Loading cached aligned data from {cache_file}")
+        return np.load(cache_file, allow_pickle=True)
+
+    # Load LFP data from .mat file
+    lfp_mat = hdf5storage.loadmat(lfp_file_path)
+    lfp_data_1 = lfp_mat['lfp'][0, 0]
+    lfp_data_2 = lfp_mat['lfp'][0, 1]
+    n_channels_1 = lfp_data_1.shape[0]
+    n_channels_2 = lfp_data_2.shape[0]
+    sampling_rate = 2500  # Initial sampling rate of LFP data
+
+    print(f"LFP data shapes: {lfp_data_1.shape}, {lfp_data_2.shape}, n_channels: {n_channels_1 + n_channels_2}")
+
+    # Combine LFP data from both probes along the channel axis
+    lfp_data = np.concatenate((lfp_data_1, lfp_data_2), axis=0)
+    lfp_timestamps = np.arange(lfp_data.shape[1]) / sampling_rate * 1e6  # Generate timestamps in microseconds
+    print(f"Combined LFP data shape: {lfp_data.shape}, LFP timestamps shape: {lfp_timestamps.shape}")
+
+    # Load positional data
+    session = FlightRoomSession(data_path, bat_id, date, use_cache=use_cache)
+    pos_data = session.cortex_data.bat_pos
+    pos_timestamps = session.cortex_data.cortex_global_sample_timestamps_sec * 1e6
+    print(f"Position data shape: {pos_data.shape}, Timestamps shape: {pos_timestamps.shape}")
+
+    # Clean and interpolate positional data
+    cleaned_pos = np.copy(pos_data)
+    for axis in range(3):  # Interpolate x, y, z
+        cleaned_pos[:, axis] = interpolate_nans(pos_data[:, axis])
+
+    # Interpolate positional data to align with LFP timestamps
+    interp_func_x = interp1d(pos_timestamps, cleaned_pos[:, 0], kind='linear', bounds_error=False, fill_value="extrapolate")
+    interp_func_y = interp1d(pos_timestamps, cleaned_pos[:, 1], kind='linear', bounds_error=False, fill_value="extrapolate")
+    interp_func_z = interp1d(pos_timestamps, cleaned_pos[:, 2], kind='linear', bounds_error=False, fill_value="extrapolate")
+
+    interpolated_pos = np.vstack((
+        interp_func_x(lfp_timestamps),
+        interp_func_y(lfp_timestamps),
+        interp_func_z(lfp_timestamps)
+    )).T
+    print(f"Interpolated positional data shape: {interpolated_pos.shape}")
+
+    # Combine LFP timestamps, LFP data (all channels), and interpolated positional data
+    aligned_array = np.column_stack((
+        lfp_timestamps,
+        lfp_data.T,  # Transpose to align channels as columns
+        interpolated_pos
+    ))
+    print(f"Aligned array shape: {aligned_array.shape}")
+
+    # Save to cache
+    if use_cache:
+        np.save(cache_file, aligned_array)
+        print(f"Aligned data cached to {cache_file}")
+
+    return aligned_array
+
 
 def load_and_clean_bat_data(data_path, bat_id, date, lfp_file_path, use_cache=True):
     """
@@ -56,18 +137,19 @@ def load_and_clean_bat_data(data_path, bat_id, date, lfp_file_path, use_cache=Tr
     
     return lfp_mat, cleaned_pos, session
 
-def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, dfs=25, use_cache=True, cache_file_path = 'lfp_bat_combined_cache.npy'):
+def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, dfs=25, use_cache=True, cache_file_path='lfp_bat_combined_cache.npy'):
     """
-    Extracts LFP data from the specified MATLAB file, downsamples the data, and combines the channels.
-    
+    Extracts LFP data from the specified MATLAB file, optionally downsamples the data, and combines the channels.
+
     Args:
         lfp_mat (dict): MATLAB data structure containing LFP data.
         sampling_rate (int): Original sampling rate of the LFP data. Default is 2500 Hz.
         dfs (int): Desired final sampling rate after downsampling. Default is 25 Hz.
         use_cache (bool): Whether to use cached data for LFP extraction and decimation.
-        
+        cache_file_path (str): Path to the cache file for saving or loading combined LFP data.
+
     Returns:
-        lfp_bat_combined (numpy.ndarray): The downsampled LFP data combined across channels.
+        lfp_bat_combined (numpy.ndarray): The optionally downsampled LFP data combined across channels.
     """
 
     # Check if cache should be used and if the file exists
@@ -90,8 +172,8 @@ def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, dfs=25, use_cac
     lfp_bat_1 = get_LFP_from_mat(lfp_data_1, n_channels, sampling_rate, dfs, use_cache=use_cache)
     lfp_bat_2 = get_LFP_from_mat(lfp_data_2, n_channels, sampling_rate, dfs, use_cache=use_cache)
 
-    # Combine the downsampled LFP data
-    lfp_bat_combined = np.concatenate((lfp_bat_1, lfp_bat_2), axis=1)  # Already decimated to 25 Hz
+    # Combine the LFP data (raw or downsampled)
+    lfp_bat_combined = np.concatenate((lfp_bat_1, lfp_bat_2), axis=1)
     print(f"LFP combined shape: {lfp_bat_combined.shape}")
 
     # Save the combined LFP data to cache
@@ -99,6 +181,7 @@ def extract_and_downsample_lfp_data(lfp_mat, sampling_rate=2500, dfs=25, use_cac
     np.save(cache_file_path, lfp_bat_combined)
 
     return lfp_bat_combined
+
 
 # Decimate function defined at the global level for parallel processing
 def decimate_func(channel_data, dec):
@@ -114,7 +197,7 @@ def decimate_func(channel_data, dec):
 
 def get_LFP_from_mat(lfp_data, n_channels, init_fs, fs=25, use_cache=False, cache_dir='./lfp_cache'):
     """
-    Decimates LFPs to the desired sampling rate from a MATLAB file.
+    Returns raw or decimated LFP data to the desired sampling rate from a MATLAB file.
     
     Args:
         lfp_data (numpy.ndarray): The LFP data array from the MATLAB file.
@@ -125,16 +208,26 @@ def get_LFP_from_mat(lfp_data, n_channels, init_fs, fs=25, use_cache=False, cach
         cache_dir (str): Directory to store cache files.
         
     Returns:
-        Decimated LFP data (numpy.ndarray).
+        numpy.ndarray: Raw or decimated LFP data.
     """
-    
+    # Handle cache setup
     if use_cache:
         os.makedirs(cache_dir, exist_ok=True)
         cache_key = hashlib.md5(lfp_data.tobytes()).hexdigest()
         cache_filename = os.path.join(cache_dir, f"{cache_key}-{n_channels}-{init_fs}-{fs}.npy")
         
+        # Return cached data if it exists
         if os.path.exists(cache_filename):
+            print(f"Loading cached data from {cache_filename}")
             return np.load(cache_filename, mmap_mode='r')
+    
+    # If no decimation is needed, return the raw data
+    if fs == init_fs:
+        print("No decimation needed. Returning raw data.")
+        if use_cache:
+            # Save raw data to cache
+            np.save(cache_filename, lfp_data)
+        return lfp_data
     
     # Compute decimation factor
     dec = int(init_fs / fs)
@@ -149,14 +242,15 @@ def get_LFP_from_mat(lfp_data, n_channels, init_fs, fs=25, use_cache=False, cach
     with Pool() as pool:
         results = pool.starmap(decimate_func, [(lfp_data[channel, :], dec) for channel in range(n_keep)])
     
+    # Store the decimated results in memory-mapped array
     for channel, result in enumerate(results):
         X[:, channel] = result[:final_length]
     
+    # Save decimated data to cache if required
     if use_cache:
         np.save(cache_filename, X)
     
     return X
-
 
 def get_cluster_labels(session, cluster):
     flight_behavior = session.cortex_data
