@@ -20,6 +20,7 @@ A set of helper functions for downloading and preprocessing flight path data.
 @author: Ben Toker
 @author: Kevin Qi 
 """
+
 def load_and_align_lfp_and_pos(data_path, bat_id, date, lfp_file_path, use_cache=True, cache_dir='./lfp_pos_cache'):
     """
     Loads LFP data from two probes, cleans and interpolates positional data, and aligns them into a combined structure.

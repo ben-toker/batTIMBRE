@@ -14,6 +14,55 @@ A set of helper functions for preprocessing the bat data.
 @author: Ben Toker
 '''
 
+def mask_by_cluster(session, masked_BIGRAW, cluster_id, buffer=10_000):
+    """
+    Masks rows of masked_BIGRAW for a specific cluster, preserving LFP integrity and flight info.
+
+    Args:
+        session (FlightRoomSession): The session object with flight data.
+        masked_BIGRAW (np.ndarray): Array with timestamps, LFP data, and positions.
+        cluster_id (int): The cluster ID to filter by.
+        buffer (int): Time buffer (in microseconds) around flight times.
+
+    Returns:
+        np.ndarray: Filtered BIGRAW with an additional column for flight numbers.
+    """
+    # Extract timestamps
+    timestamps = masked_BIGRAW[:, 0]  # First column is timestamps
+    flights = session.get_flights_by_cluster([cluster_id])  # Retrieve flights for the cluster
+
+    print(f"Retrieved {len(flights)} flights for cluster {cluster_id}.")
+
+    # Initialize mask for selecting rows
+    row_mask = np.zeros(len(timestamps), dtype=bool)  # False mask for all rows
+    flight_info = np.zeros(len(timestamps), dtype=int)  # Column to store flight numbers
+
+    for flight_idx, flight in enumerate(flights, start=1):
+        # Calculate start and end times with buffer
+        start_time = flight.start_time * 1e6 - buffer  # Convert to microseconds
+        end_time = flight.end_time * 1e6 + buffer  # Convert to microseconds
+        
+        # Create a mask for this flight
+        flight_mask = (timestamps >= start_time) & (timestamps <= end_time)
+        
+        # Combine with the overall mask
+        row_mask |= flight_mask
+        flight_info[flight_mask] = flight_idx  # Assign flight number to these rows
+
+    # Apply the mask
+    filtered_BIGRAW = masked_BIGRAW[row_mask]
+    flight_info_filtered = flight_info[row_mask]
+
+    # Combine filtered data with flight numbers
+    result = np.column_stack((filtered_BIGRAW, flight_info_filtered))
+
+    # Debug: Print retained timestamps
+    retained_timestamps = result[:, 0]
+    print(f"Filtered BIGRAW timestamp range: {retained_timestamps[0]} to {retained_timestamps[-1]}")
+
+    return result
+
+
 def find_multi_label_bins(spk_timebins, labels, label_timestamps_sec):
     """
     Finds the bins with multiple different labels and returns the unique combinations and counts.
